@@ -19,6 +19,7 @@ A production-ready FastAPI + SQLAlchemy (MySQL) backend for invoice management s
 - **MySQL** - Database (via PyMySQL driver)
 - **Pydantic** 2.8.2 - Data validation
 - **Uvicorn** - ASGI server
+- **pytest** 8.3.4 - Testing framework
 
 ## Project Structure
 
@@ -108,6 +109,22 @@ uvicorn app.main:app --reload
 
 The API will be available at `http://127.0.0.1:8000`
 
+### 5. Run Tests
+
+```bash
+# Run all tests
+pytest
+
+# Run with verbose output
+pytest -v
+
+# Run specific test file
+pytest tests/test_dashboard.py
+
+# Run with coverage
+pytest --cov=app tests/
+```
+
 ## API Documentation
 
 Once the server is running, visit:
@@ -140,7 +157,55 @@ Once the server is running, visit:
 - `POST /payments/` - Create a new payment
 
 ### Dashboard
-- `GET /dashboard/summary` - Get dashboard metrics and recent activities
+
+#### GET `/dashboard/summary`
+Get dashboard metrics and recent activities with optional filters.
+
+**Query Parameters (all optional):**
+- `from_date` (date) - Filter from date (YYYY-MM-DD)
+- `to_date` (date) - Filter to date (YYYY-MM-DD)
+- `company_id` (int) - Filter by company ID
+- `client_id` (int) - Filter by client ID
+- `project_id` (int) - Filter by project ID
+
+**Response:**
+```json
+{
+  "metrics": {
+    "total_invoices": 42,
+    "total_amount": 125000.00,
+    "total_paid": 95000.00,
+    "outstanding": 30000.00
+  },
+  "recent_invoices": [...],
+  "recent_payments": [...]
+}
+```
+
+**Performance optimizations:**
+- Uses aggregated queries to minimize database round trips
+- Reuses filtered queries for consistency
+- Supports combined filters for precise data slicing
+
+#### GET `/dashboard/export`
+Export dashboard data as CSV or JSON with the same filtering options.
+
+**Query Parameters:**
+- `format` (string, required) - Export format: "csv" or "json"
+- All filter parameters from `/dashboard/summary` are supported
+
+**Response:**
+- For CSV: Downloads a CSV file with invoices and payments sections
+- For JSON: Downloads a JSON file with metadata, filters applied, and complete data
+
+**Example:**
+```bash
+# Export last 30 days as CSV
+curl "http://127.0.0.1:8000/dashboard/export?format=csv&from_date=2024-01-01" -o report.csv
+
+# Export filtered data as JSON
+curl "http://127.0.0.1:8000/dashboard/export?format=json&company_id=1&client_id=2" -o report.json
+```
 
 ## Testing the API
 
@@ -165,7 +230,20 @@ curl -X POST http://127.0.0.1:8000/companies/ \
 
 ### 4. Dashboard Summary
 ```bash
+# Basic dashboard summary
 curl http://127.0.0.1:8000/dashboard/summary
+
+# With date range filter
+curl "http://127.0.0.1:8000/dashboard/summary?from_date=2024-01-01&to_date=2024-12-31"
+
+# With company and client filters
+curl "http://127.0.0.1:8000/dashboard/summary?company_id=1&client_id=2"
+
+# Export dashboard data as CSV
+curl "http://127.0.0.1:8000/dashboard/export?format=csv" -o dashboard.csv
+
+# Export dashboard data as JSON with filters
+curl "http://127.0.0.1:8000/dashboard/export?format=json&from_date=2024-01-01" -o dashboard.json
 ```
 
 ## Database Schema

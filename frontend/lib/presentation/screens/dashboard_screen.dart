@@ -5,6 +5,10 @@ import 'package:invoice/application/client_provider.dart';
 import 'package:invoice/application/project_provider.dart';
 import 'package:invoice/data/models/client.dart';
 import 'package:invoice/data/models/project.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:intl/intl.dart';
+import 'package:universal_html/html.dart' as html;
+import 'dart:typed_data';
 
 import '../../application/company_provider.dart';
 import '../../application/dashboard_provider.dart';
@@ -27,7 +31,7 @@ class DashboardScreen extends ConsumerStatefulWidget {
 class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   bool _loadedOnce = false;
 
-  // dropdown local state (in future, load dynamic lists from APIs)
+  // dropdown local state
   final _durationItems = const {
     "Last 7 days": 7,
     "Last 30 days": 30,
@@ -35,9 +39,13 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
   };
   String _durationLabel = "Last 30 days";
 
-  int? _selectedCompany; // replace later with real lists
+  int? _selectedCompany;
   int? _selectedClient;
   int? _selectedProject;
+  
+  // Date range state
+  DateTime? _fromDate;
+  DateTime? _toDate;
 
   @override
   void initState() {
@@ -80,6 +88,32 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         children: [
           // FILTER BAR
           _filterBar(context, state),
+
+          const SizedBox(height: 16),
+
+          // CHARTS SECTION
+          LayoutBuilder(
+            builder: (context, constraints) {
+              if (constraints.maxWidth < 900) {
+                return Column(
+                  children: [
+                    _buildPaidVsOutstandingChart(s),
+                    const SizedBox(height: 16),
+                    _exportButton(context),
+                  ],
+                );
+              } else {
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: _buildPaidVsOutstandingChart(s)),
+                    const SizedBox(width: 16),
+                    SizedBox(width: 200, child: _exportButton(context)),
+                  ],
+                );
+              }
+            },
+          ),
 
           const SizedBox(height: 16),
 
@@ -241,6 +275,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     },
                   ),
                   const SizedBox(height: 12),
+                  _dateRangePicker(context),
+                  const SizedBox(height: 12),
                   _dropdown<int?>(
                     label: "Company",
                     value: _selectedCompany,
@@ -349,6 +385,8 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
                     .setDays(_durationItems[v]!);
               },
             ),
+            // Date Range Picker
+            _dateRangePicker(context),
             // Company
             _dropdown<int?>(
               label: "Company",
@@ -1169,6 +1207,265 @@ class _DashboardScreenState extends ConsumerState<DashboardScreen> {
         },
       ),
     );
+  }
+
+  // Date Range Picker
+  Widget _dateRangePicker(BuildContext context) {
+    final dateFormat = DateFormat('MMM d, y');
+    String displayText = 'Select Date Range';
+    
+    if (_fromDate != null || _toDate != null) {
+      displayText = '';
+      if (_fromDate != null) {
+        displayText += dateFormat.format(_fromDate!);
+      }
+      if (_toDate != null) {
+        if (_fromDate != null) displayText += ' - ';
+        displayText += dateFormat.format(_toDate!);
+      }
+    }
+
+    return SizedBox(
+      width: 220,
+      child: OutlinedButton.icon(
+        icon: const Icon(Icons.date_range, size: 18),
+        label: Text(
+          displayText,
+          style: const TextStyle(fontSize: 13),
+          overflow: TextOverflow.ellipsis,
+        ),
+        onPressed: () async {
+          final picked = await showDateRangePicker(
+            context: context,
+            firstDate: DateTime(2020),
+            lastDate: DateTime.now().add(const Duration(days: 365)),
+            initialDateRange: _fromDate != null && _toDate != null
+                ? DateTimeRange(start: _fromDate!, end: _toDate!)
+                : null,
+          );
+          
+          if (picked != null) {
+            setState(() {
+              _fromDate = picked.start;
+              _toDate = picked.end;
+            });
+            
+            ref.read(dashboardProvider.notifier).setDateRange(
+              fromDate: dateFormat.format(picked.start),
+              toDate: dateFormat.format(picked.end),
+            );
+          }
+        },
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+        ),
+      ),
+    );
+  }
+
+  // Paid vs Outstanding Pie Chart
+  Widget _buildPaidVsOutstandingChart(summary) {
+    final total = summary.metrics.totalAmount;
+    final paid = summary.metrics.totalPaid;
+    final outstanding = summary.metrics.outstanding;
+
+    if (total == 0) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: const Padding(
+          padding: EdgeInsets.all(24),
+          child: Center(
+            child: Text('No data available for chart'),
+          ),
+        ),
+      );
+    }
+
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Payment Distribution',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              height: 200,
+              child: Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: PieChart(
+                      PieChartData(
+                        sectionsSpace: 2,
+                        centerSpaceRadius: 40,
+                        sections: [
+                          PieChartSectionData(
+                            value: paid,
+                            title: '${((paid / total) * 100).toStringAsFixed(1)}%',
+                            color: Colors.green,
+                            radius: 60,
+                            titleStyle: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                          PieChartSectionData(
+                            value: outstanding,
+                            title: '${((outstanding / total) * 100).toStringAsFixed(1)}%',
+                            color: Colors.orange,
+                            radius: 60,
+                            titleStyle: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 20),
+                  Expanded(
+                    flex: 1,
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _chartLegendItem('Paid', Colors.green, fmtMoney(paid)),
+                        const SizedBox(height: 12),
+                        _chartLegendItem('Outstanding', Colors.orange, fmtMoney(outstanding)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _chartLegendItem(String label, Color color, String value) {
+    return Row(
+      children: [
+        Container(
+          width: 16,
+          height: 16,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: BorderRadius.circular(4),
+          ),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey,
+                ),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  // Export Button
+  Widget _exportButton(BuildContext context) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'Export Data',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              icon: const Icon(Icons.download, size: 18),
+              label: const Text('Export CSV'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () => _exportData('csv'),
+            ),
+            const SizedBox(height: 12),
+            OutlinedButton.icon(
+              icon: const Icon(Icons.code, size: 18),
+              label: const Text('Export JSON'),
+              style: OutlinedButton.styleFrom(
+                padding: const EdgeInsets.symmetric(vertical: 12),
+              ),
+              onPressed: () => _exportData('json'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _exportData(String format) async {
+    try {
+      final response = await ref.read(dashboardProvider.notifier).exportDashboard(format);
+      
+      // Create blob and download
+      final bytes = response.data as Uint8List;
+      final blob = html.Blob([bytes]);
+      final url = html.Url.createObjectUrlFromBlob(blob);
+      final anchor = html.AnchorElement(href: url)
+        ..setAttribute('download', 'dashboard_export_${DateTime.now().millisecondsSinceEpoch}.$format')
+        ..click();
+      html.Url.revokeObjectUrl(url);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Dashboard exported as $format successfully'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error exporting data: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
 }

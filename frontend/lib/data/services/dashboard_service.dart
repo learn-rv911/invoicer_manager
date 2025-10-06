@@ -10,6 +10,8 @@ class DashboardService {
 
   Future<DashboardSummary> getDashboardSummary({
     int days = 30,
+    String? fromDate,
+    String? toDate,
     int? companyId,
     int? clientId,
     int? projectId,
@@ -17,12 +19,37 @@ class DashboardService {
     final Response response = await _apiService.dio.get(
       "/dashboard/summary",
       queryParameters: {
-        "days": days,
+        if (fromDate != null) "from_date": fromDate,
+        if (toDate != null) "to_date": toDate,
         if (companyId != null) "company_id": companyId,
         if (clientId != null) "client_id": clientId,
         if (projectId != null) "project_id": projectId,
       },
     );
     return DashboardSummary.fromJson(response.data);
+  }
+
+  Future<Response> exportDashboard({
+    required String format,
+    String? fromDate,
+    String? toDate,
+    int? companyId,
+    int? clientId,
+    int? projectId,
+  }) async {
+    return await _apiService.dio.get(
+      "/dashboard/export",
+      queryParameters: {
+        "format": format,
+        if (fromDate != null) "from_date": fromDate,
+        if (toDate != null) "to_date": toDate,
+        if (companyId != null) "company_id": companyId,
+        if (clientId != null) "client_id": clientId,
+        if (projectId != null) "project_id": projectId,
+      },
+      options: Options(
+        responseType: ResponseType.bytes,
+      ),
+    );
   }
 }

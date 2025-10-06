@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_riverpod/legacy.dart';
 import 'package:invoice/data/models/dashboard.dart';
@@ -13,6 +15,8 @@ class DashboardState {
 
   // filters
   final int days;
+  final String? fromDate;
+  final String? toDate;
   final int? companyId;
   final int? clientId;
   final int? projectId;
@@ -22,6 +26,8 @@ class DashboardState {
     this.loading = false,
     this.error,
     this.days = 30,
+    this.fromDate,
+    this.toDate,
     this.companyId,
     this.clientId,
     this.projectId,
@@ -32,6 +38,8 @@ class DashboardState {
     bool? loading,
     String? error,
     int? days,
+    String? fromDate,
+    String? toDate,
     int? companyId,
     int? clientId,
     int? projectId,
@@ -41,6 +49,8 @@ class DashboardState {
       loading: loading ?? this.loading,
       error: error,
       days: days ?? this.days,
+      fromDate: fromDate ?? this.fromDate,
+      toDate: toDate ?? this.toDate,
       companyId: companyId ?? this.companyId,
       clientId: clientId ?? this.clientId,
       projectId: projectId ?? this.projectId,
@@ -50,6 +60,7 @@ class DashboardState {
 
 class DashboardController extends StateNotifier<DashboardState> {
   final DashboardRepository _repository;
+  Timer? _debounceTimer;
 
   DashboardController(this._repository) : super(DashboardState());
 
@@ -58,19 +69,33 @@ class DashboardController extends StateNotifier<DashboardState> {
     try {
       final data = await _repository.getDashboardSummary(
         days: state.days,
+        fromDate: state.fromDate,
+        toDate: state.toDate,
         companyId: state.companyId,
         clientId: state.clientId,
         projectId: state.projectId,
       );
-      state = DashboardState(summary: data, loading: false);
+      state = state.copyWith(summary: data, loading: false);
     } catch (e) {
-      state = DashboardState(loading: false, error: e.toString());
+      state = state.copyWith(loading: false, error: e.toString());
     }
+  }
+
+  void _debouncedLoad() {
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+      load();
+    });
   }
 
   void setDays(int days) {
     state = state.copyWith(days: days);
-    load();
+    _debouncedLoad();
+  }
+
+  void setDateRange({String? fromDate, String? toDate}) {
+    state = state.copyWith(fromDate: fromDate, toDate: toDate);
+    _debouncedLoad();
   }
 
   void setFilters({int? companyId, int? clientId, int? projectId}) {
@@ -79,7 +104,24 @@ class DashboardController extends StateNotifier<DashboardState> {
       clientId: clientId,
       projectId: projectId,
     );
-    load();
+    _debouncedLoad();
+  }
+
+  Future<Response> exportDashboard(String format) {
+    return _repository.exportDashboard(
+      format: format,
+      fromDate: state.fromDate,
+      toDate: state.toDate,
+      companyId: state.companyId,
+      clientId: state.clientId,
+      projectId: state.projectId,
+    );
+  }
+
+  @override
+  void dispose() {
+    _debounceTimer?.cancel();
+    super.dispose();
   }
 }
 
