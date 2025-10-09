@@ -9,8 +9,9 @@ router = APIRouter(prefix="/payments", tags=["Payments"])
 
 @router.get("/", response_model=list[PaymentOut])
 def list_payments(company_id: int | None = None, client_id: int | None = None, project_id: int | None = None,
+                  from_date: str | None = None, to_date: str | None = None, limit: int | None = None,
                   db: Session = Depends(get_db)):
-    return [PaymentOut.model_validate(x) for x in crud.list_payments(db, company_id, client_id, project_id)]
+    return [PaymentOut.model_validate(x) for x in crud.list_payments(db, company_id, client_id, project_id, from_date, to_date, limit)]
 
 
 @router.post("/", response_model=PaymentOut)

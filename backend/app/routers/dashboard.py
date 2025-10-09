@@ -23,12 +23,24 @@ def apply_filters(query, model, from_date: Optional[date], to_date: Optional[dat
     if to_date:
         date_field = model.issue_date if model == models.Invoice else model.payment_date
         query = query.filter(date_field <= to_date)
-    if company_id and hasattr(model, 'company_id'):
-        query = query.filter(model.company_id == company_id)
-    if client_id and hasattr(model, 'client_id'):
-        query = query.filter(model.client_id == client_id)
-    if project_id and hasattr(model, 'project_id'):
-        query = query.filter(model.project_id == project_id)
+    
+    # For invoices, we need to join with projects to filter by company_id
+    if model == models.Invoice:
+        if company_id:
+            query = query.join(models.Project, models.Invoice.project_id == models.Project.id)
+            query = query.filter(models.Project.company_id == company_id)
+        if client_id:
+            query = query.filter(models.Invoice.client_id == client_id)
+        if project_id:
+            query = query.filter(models.Invoice.project_id == project_id)
+    else:  # For payments
+        if company_id:
+            query = query.filter(model.company_id == company_id)
+        if client_id:
+            query = query.filter(model.client_id == client_id)
+        if project_id:
+            query = query.filter(model.project_id == project_id)
+    
     return query
 
 

@@ -83,6 +83,7 @@ class InvoiceBase(BaseModel):
     due_date: Optional[date] = None
     status: str
     currency: str
+    gst_rate: Optional[int] = None
     subtotal: float
     tax: float
     total: float
@@ -90,7 +91,7 @@ class InvoiceBase(BaseModel):
 
 
 class InvoiceCreate(InvoiceBase):
-    pass
+    items: Optional[list] = []  # Allow items field for compatibility
 
 
 class InvoiceOut(InvoiceBase):

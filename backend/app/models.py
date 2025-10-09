@@ -57,13 +57,14 @@ class Project(Base):
 class Invoice(Base):
     __tablename__ = "invoices"
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
-    invoice_number: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    invoice_number: Mapped[str] = mapped_column(String(32), nullable=False)
     client_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("clients.id"), nullable=False)
     project_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("projects.id"), nullable=False)
     issue_date: Mapped[date] = mapped_column(Date, nullable=False)
     due_date: Mapped[date | None] = mapped_column(Date)
     status: Mapped[str] = mapped_column(String(20), nullable=False)
     currency: Mapped[str] = mapped_column(String(10), nullable=False)
+    gst_rate: Mapped[int | None] = mapped_column(Integer)
     subtotal: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     tax: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     total: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
